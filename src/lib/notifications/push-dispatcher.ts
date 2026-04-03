@@ -210,3 +210,6 @@ export async function dispatchNotification(options: DispatchOptions): Promise<vo
 
   await Promise.allSettled(tasks)
 }
+
+// Alias for classify/route.ts compatibility
+export const dispatchPushNotification = dispatchNotification
