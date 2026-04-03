@@ -1,409 +1,183 @@
+/**
+ * @file src/app/onboarding/page.tsx
+ * @description TaxFlow AI — 3단계 온보딩
+ * 완료 시 notification_setup_done=false 저장 + /dashboard?welcome=1 redirect
+ */
 'use client'
-
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { cn } from '@/lib/utils'
-import {
-  Camera, Pen, Code, BookOpen, Film, User,
-  CheckCircle2, ChevronRight, ChevronLeft, Upload,
-} from 'lucide-react'
+import Link from 'next/link'
+import { createBrowserSupabase } from '@/lib/supabase/auth-helpers'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type BizType = 'youtuber'|'streamer'|'freelance_designer'|'freelance_developer'|'freelance_writer'|'photographer'|'other_creator'
+type RevRange = 'under_30m'|'30m_80m'|'80m_150m'|'over_150m'
 
-interface JobType {
-  value:       string
-  label:       string
-  icon:        React.ElementType
-  description: string
-  deductions:  string[]
-}
-
-const JOB_TYPES: JobType[] = [
-  {
-    value: 'creator',
-    label: '유튜버/크리에이터',
-    icon: Camera,
-    description: '유튜브, 인스타그램, 틱톡 등 콘텐츠 크리에이터',
-    deductions: ['장비비 (카메라, 조명, 마이크)', '편집 소프트웨어 구독', '스튜디오 임차료'],
-  },
-  {
-    value: 'designer',
-    label: '프리랜서 디자이너',
-    icon: Pen,
-    description: 'UI/UX, 그래픽, 브랜딩 디자인',
-    deductions: ['Adobe CC, Figma 구독', '하드웨어 (모니터, 태블릿)', '교육비·강의비'],
-  },
-  {
-    value: 'developer',
-    label: '프리랜서 개발자',
-    icon: Code,
-    description: '소프트웨어 개발, 앱 개발, 웹 개발',
-    deductions: ['소프트웨어·SaaS 구독', '업무용 통신비 50%', '교육비·기술서적'],
-  },
-  {
-    value: 'writer',
-    label: '작가/번역가',
-    icon: BookOpen,
-    description: '소설, 기사, 번역, 카피라이팅',
-    deductions: ['도서·자료 구입비', '소프트웨어 (Scrivener 등)', '교육·세미나 참가비'],
-  },
-  {
-    value: 'editor',
-    label: '영상편집자',
-    icon: Film,
-    description: '유튜브·광고·영화 편집 전문',
-    deductions: ['편집 소프트웨어 (Premiere, DaVinci)', '음악 라이선스 구입', '외장 하드·저장장치'],
-  },
-  {
-    value: 'other',
-    label: '기타 1인사업자',
-    icon: User,
-    description: '강사, 컨설턴트, 기타 프리랜서',
-    deductions: ['업무용 교통비', '통신비 50%', '일반 사무용품'],
-  },
+const TYPES = [
+  { v:'youtuber' as BizType,            label:'유튜버',           icon:'▶️' },
+  { v:'streamer' as BizType,            label:'스트리머',          icon:'🎮' },
+  { v:'freelance_designer' as BizType,  label:'프리랜서 디자이너', icon:'🎨' },
+  { v:'freelance_developer' as BizType, label:'프리랜서 개발자',   icon:'💻' },
+  { v:'freelance_writer' as BizType,    label:'작가 / 번역가',     icon:'✍️' },
+  { v:'photographer' as BizType,        label:'사진작가 / 영상PD', icon:'📷' },
+  { v:'other_creator' as BizType,       label:'기타 크리에이터',   icon:'✨' },
 ]
-
-// ─── Step 2 form schema ───────────────────────────────────────────────────────
-
-const REVENUE_TIERS = [
-  { value: 'under_30m',    label: '3천만 원 미만'         },
-  { value: 'under_50m',    label: '3천만 ~ 5천만 원'      },
-  { value: '50m_150m',     label: '5천만 ~ 1억5천만 원'   },
-  { value: 'over_150m',    label: '1억5천만 원 이상'       },
+const REVENUES = [
+  { v:'under_30m' as RevRange, label:'3천만원 미만' },
+  { v:'30m_80m' as RevRange,   label:'3천만 ~ 8천만원' },
+  { v:'80m_150m' as RevRange,  label:'8천만 ~ 1억 5천만원' },
+  { v:'over_150m' as RevRange, label:'1억 5천만원 초과' },
 ]
-
-const businessSchema = z.object({
-  business_number: z.string().optional(),
-  business_name:   z.string().optional(),
-  revenue_tier:    z.string().min(1, '매출 구간을 선택해 주세요'),
-  is_simplified:   z.string(),
-})
-type BusinessForm = z.infer<typeof businessSchema>
-
-// ─── Step 3 bank guide data ────────────────────────────────────────────────────
-
-const BANKS = [
-  { name: 'KB국민은행',  path: '인터넷뱅킹 → 조회 → 거래내역 조회 → Excel 다운로드' },
-  { name: '신한은행',    path: '인터넷뱅킹 → 조회/이체 → 거래내역 조회 → CSV' },
-  { name: '우리은행',    path: '우리WON뱅킹 → 계좌 → 거래내역 → 내보내기' },
-  { name: '하나은행',    path: '하나원큐 → 내 계좌 → 거래내역 → 엑셀 다운로드' },
-  { name: '기업은행',    path: 'IBK기업은행 → 조회 → 거래내역 → CSV 저장' },
-  { name: '농협은행',    path: 'NH스마트뱅킹 → 계좌 → 거래내역 → 내려받기' },
-  { name: '카카오뱅크',  path: '카카오뱅크 앱 → 계좌 → 거래내역 전체보기 → 내보내기' },
-  { name: '토스뱅크',   path: '토스 앱 → 계좌 → 거래 내역 → 파일로 내보내기' },
-]
-
-// ─── Step indicator ────────────────────────────────────────────────────────────
-
-function StepDot({ step, current }: { step: number; current: number }) {
-  const done   = current > step
-  const active = current === step
-  return (
-    <div className={cn(
-      'flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
-      done   && 'bg-blue-600 text-white',
-      active && 'bg-blue-600 text-white ring-4 ring-blue-100',
-      !done && !active && 'bg-slate-100 text-slate-400',
-    )}>
-      {done ? <CheckCircle2 className="h-4 w-4" /> : step}
-    </div>
-  )
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const [step,        setStep]        = useState(1)
-  const [jobType,     setJobType]     = useState<string>('')
-  const [saving,      setSaving]      = useState(false)
+  const [step, setStep] = useState<1|2|3>(1)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const [form, setForm] = useState({ businessType: '' as BizType|'', fullName: '', isSimplifiedVat: false, revenueRange: '' as RevRange|'' })
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } =
-    useForm<BusinessForm>({
-      resolver: zodResolver(businessSchema),
-      defaultValues: { revenue_tier: '', is_simplified: 'false' },
-    })
+  const s1ok = !!form.businessType
+  const s2ok = !!form.revenueRange && form.fullName.trim().length >= 2
+  const recBiz = form.revenueRange === '80m_150m' || form.revenueRange === 'over_150m'
 
-  const revenueValue = watch('revenue_tier')
-
-  // ── Complete onboarding ───────────────────────────────────────────────────
-
-  const complete = useCallback(async () => {
-    setSaving(true)
-    try {
-      const supabase = createClient() as any
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { toast.error('로그인이 필요합니다'); return }
-
-      const values = watch()
-      await supabase.from('users_profile').update({
-        business_type:         jobType,
-        business_name:         values.business_name || null,
-        business_number:       values.business_number || null,
-        annual_revenue_tier:   values.revenue_tier || 'under_50m',
-        is_simplified_tax:     values.is_simplified === 'true',
-        onboarding_completed:  true,
-      }).eq('id', user.id)
-
-      toast.success('설정이 완료되었습니다!')
-      router.push('/upload')
-    } catch {
-      toast.error('저장 중 오류가 발생했습니다')
-    } finally {
-      setSaving(false)
-    }
-  }, [jobType, router, watch])
-
-  const onStep2Submit = () => setStep(3)
-
-  // ─────────────────────────────────────────────────────────────────────────
+  async function handleComplete() {
+    setSaving(true); setErr('')
+    const sb = createBrowserSupabase()
+    const { data: { user }, error: ae } = await sb.auth.getUser()
+    if (ae || !user) { router.replace('/login'); return }
+    const { error: ue } = await sb.from('profiles').upsert({
+      id: user.id, full_name: form.fullName.trim(),
+      business_type: form.businessType, is_simplified_vat: form.isSimplifiedVat,
+      revenue_range: form.revenueRange, onboarding_completed: true,
+      notification_setup_done: false, plan: 'free',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    if (ue) { setErr('저장에 실패했습니다. 잠시 후 다시 시도해 주세요.'); setSaving(false); return }
+    router.replace('/dashboard?welcome=1')
+  }
 
   return (
-    <main className="flex min-h-screen items-start justify-center bg-gradient-to-b from-slate-50 to-white px-4 py-10">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white text-base font-bold mx-auto">
-            T
+    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-lg">
+        <div className="mb-8">
+          <div className="flex gap-2 mb-2">
+            {([1,2,3] as const).map(s => (
+              <div key={s} className={`flex-1 h-1.5 rounded-full transition-colors ${s <= step ? 'bg-blue-600' : 'bg-gray-800'}`} />
+            ))}
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">TaxFlow AI 시작하기</h1>
-          <p className="mt-1 text-sm text-slate-500">맞춤형 세금 코칭을 위해 기본 정보를 입력해주세요</p>
+          <p className="text-center text-xs text-gray-500">{step} / 3 단계</p>
         </div>
 
-        {/* Step indicator */}
-        <div className="mb-8 flex items-center justify-center gap-3">
-          {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center gap-3">
-              <StepDot step={s} current={step} />
-              {s < 3 && (
-                <div className={cn(
-                  'h-px w-12 transition-colors',
-                  step > s ? 'bg-blue-600' : 'bg-slate-200'
-                )} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* ── STEP 1: Job type ─────────────────────────────────────────── */}
         {step === 1 && (
           <div>
-            <h2 className="mb-1 text-lg font-semibold text-slate-900">업종을 선택해주세요</h2>
-            <p className="mb-5 text-sm text-slate-500">업종에 맞는 공제 항목을 자동으로 추천해드립니다</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {JOB_TYPES.map((jt) => {
-                const Icon    = jt.icon
-                const selected = jobType === jt.value
-                return (
-                  <button
-                    key={jt.value}
-                    type="button"
-                    onClick={() => setJobType(jt.value)}
-                    className={cn(
-                      'flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-all',
-                      selected
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
-                    )}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className={cn(
-                        'flex h-9 w-9 items-center justify-center rounded-lg',
-                        selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
-                      )}>
-                        <Icon className="h-4.5 w-4.5" />
-                      </div>
-                      {selected && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
-                    </div>
-                    <div>
-                      <p className={cn(
-                        'text-sm font-semibold',
-                        selected ? 'text-blue-800' : 'text-slate-800'
-                      )}>
-                        {jt.label}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">{jt.description}</p>
-                    </div>
-                    {/* Top 3 deductions */}
-                    <ul className="mt-1 space-y-1">
-                      {jt.deductions.map((d) => (
-                        <li key={d} className="flex items-start gap-1.5 text-[11px] text-slate-500">
-                          <span className={cn(
-                            'mt-0.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full',
-                            selected ? 'bg-blue-500' : 'bg-slate-300'
-                          )} />
-                          {d}
-                        </li>
-                      ))}
-                    </ul>
-                  </button>
-                )
-              })}
+            <h2 className="text-2xl font-bold text-center mb-2">어떤 크리에이터인가요?</h2>
+            <p className="text-gray-400 text-sm text-center mb-7">업종에 맞는 공제 항목을 자동으로 적용합니다.</p>
+            <div className="grid grid-cols-2 gap-3 mb-7">
+              {TYPES.map(t => (
+                <button key={t.v} onClick={() => setForm(f => ({ ...f, businessType: t.v }))}
+                  className={`rounded-xl border p-4 text-left transition-all ${form.businessType === t.v ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700 bg-gray-900 hover:border-gray-500'}`}>
+                  <div className="text-2xl mb-2">{t.icon}</div>
+                  <div className="text-sm font-medium">{t.label}</div>
+                </button>
+              ))}
             </div>
-            <div className="mt-6 flex justify-end">
-              <Button
-                onClick={() => setStep(2)}
-                disabled={!jobType}
-                className="gap-2"
-              >
-                다음 단계
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            <button onClick={() => setStep(2)} disabled={!s1ok}
+              className="w-full rounded-lg bg-blue-600 py-3 font-semibold hover:bg-blue-500 disabled:opacity-40 transition-colors text-sm">
+              다음
+            </button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
+            <h2 className="text-2xl font-bold text-center mb-2">사업자 기본 정보</h2>
+            <p className="text-gray-400 text-sm text-center mb-7">세금 예측 정확도를 높이기 위한 참고 정보입니다.</p>
+            <div className="space-y-5 mb-7">
+              <div>
+                <label htmlFor="name" className="block text-sm text-gray-300 mb-1">이름 <span className="text-gray-500">(닉네임 가능)</span></label>
+                <input id="name" type="text" maxLength={50} value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 text-white text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder="홍길동 또는 채널명" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-300 mb-2">예상 연간 수입 구간</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {REVENUES.map(r => (
+                    <button key={r.v} onClick={() => setForm(f => ({ ...f, revenueRange: r.v }))}
+                      className={`rounded-lg border p-3 text-sm transition-all ${form.revenueRange === r.v ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-500'}`}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                {recBiz && <p className="text-xs text-purple-400 mt-2">👑 연 8천만원 이상은 Business 플랜 세무사 상담이 도움이 될 가능성이 있습니다. (참고용)</p>}
+              </div>
+              <div className="rounded-xl border border-gray-700 bg-gray-900 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">간이과세자 여부</p>
+                    <p className="text-xs text-gray-500 mt-0.5">연매출 4,800만원 미만 + 간이과세자 등록</p>
+                  </div>
+                  <button role="switch" aria-checked={form.isSimplifiedVat}
+                    onClick={() => setForm(f => ({ ...f, isSimplifiedVat: !f.isSimplifiedVat }))}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${form.isSimplifiedVat ? 'bg-blue-600' : 'bg-gray-700'}`}>
+                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isSimplifiedVat ? 'translate-x-7' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="flex-1 rounded-lg border border-gray-700 py-3 font-semibold hover:bg-gray-800 transition-colors text-sm">이전</button>
+              <button onClick={() => setStep(3)} disabled={!s2ok} className="flex-1 rounded-lg bg-blue-600 py-3 font-semibold hover:bg-blue-500 disabled:opacity-40 transition-colors text-sm">다음</button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 2: Business info ─────────────────────────────────────── */}
-        {step === 2 && (
-          <form onSubmit={handleSubmit(onStep2Submit)}>
-            <h2 className="mb-1 text-lg font-semibold text-slate-900">사업자 정보 입력</h2>
-            <p className="mb-5 text-sm text-slate-500">정확한 세금 계산을 위해 사업자 정보를 입력해주세요</p>
-
-            <div className="space-y-4">
-              {/* Business number */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">사업자등록번호 <span className="text-slate-400 text-xs">(선택)</span></Label>
-                <Input
-                  {...register('business_number')}
-                  placeholder="000-00-00000"
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              {/* Business name */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">상호명 <span className="text-slate-400 text-xs">(선택)</span></Label>
-                <Input
-                  {...register('business_name')}
-                  placeholder="예: 홍길동 스튜디오"
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              {/* Revenue tier */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">
-                  연 매출 구간 <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={revenueValue}
-                  onValueChange={(v) => setValue('revenue_tier', v, { shouldValidate: true })}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="매출 구간을 선택하세요" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REVENUE_TIERS.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.revenue_tier && (
-                  <p className="text-xs text-red-500">{errors.revenue_tier.message}</p>
-                )}
-              </div>
-
-              {/* Simplified tax payer */}
-              <div className="rounded-lg border border-slate-200 p-4">
-                <p className="mb-3 text-sm font-medium text-slate-800">간이과세자 여부</p>
-                <div className="flex gap-3">
-                  {[
-                    { val: 'false', label: '일반과세자' },
-                    { val: 'true',  label: '간이과세자 (연매출 1억400만 원 미만)' },
-                  ].map(({ val, label }) => (
-                    <label key={val} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        {...register('is_simplified')}
-                        value={val}
-                        className="accent-blue-600"
-                      />
-                      <span className="text-sm text-slate-700">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(1)} className="gap-2">
-                <ChevronLeft className="h-4 w-4" /> 이전
-              </Button>
-              <Button type="submit" className="gap-2">
-                다음 단계 <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {/* ── STEP 3: Bank guide ────────────────────────────────────────── */}
         {step === 3 && (
           <div>
-            <h2 className="mb-1 text-lg font-semibold text-slate-900">은행 거래내역 CSV 내보내기</h2>
-            <p className="mb-5 text-sm text-slate-500">
-              거래내역 CSV 파일을 업로드하면 AI가 자동으로 분류합니다
-            </p>
-
-            <div className="space-y-2">
-              {BANKS.map((bank, i) => (
-                <div
-                  key={bank.name}
-                  className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3.5"
-                >
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
-                    {i + 1}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{bank.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{bank.path}</p>
-                  </div>
-                  {/* Screenshot placeholder */}
-                  <div className="ml-auto flex-shrink-0 h-8 w-12 rounded border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center">
-                    <span className="text-[8px] text-slate-300">이미지</span>
-                  </div>
-                </div>
-              ))}
+            <h2 className="text-2xl font-bold text-center mb-2">거의 다 됐어요!</h2>
+            <p className="text-gray-400 text-sm text-center mb-6">대시보드에서 CSV를 업로드하면 AI 분류가 바로 시작됩니다.</p>
+            <div className="rounded-xl border border-blue-500/40 bg-blue-950/30 p-5 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-bold text-white text-sm">⚡ Pro 혜택 (참고용)</p>
+                <span className="text-xs text-green-400 font-semibold">첫 달 19,500원</span>
+              </div>
+              <ul className="space-y-1.5 mb-4">
+                {['무제한 AI 거래 분류 (Free: 월 5회)','실시간 카카오 절세 알림','홈택스 신고 파일 자동 생성','영수증 OCR + 증빙 저장소'].map(f => (
+                  <li key={f} className="flex items-start gap-2 text-xs text-blue-100">
+                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✓</span>{f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/signup?plan=pro" className="block w-full rounded-lg bg-blue-600 hover:bg-blue-500 py-2.5 text-center text-sm font-bold text-white transition-colors">
+                첫 달 19,500원으로 Pro 시작하기
+              </Link>
             </div>
-
-            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3">
-              <p className="text-xs text-amber-700">
-                💡 <strong>팁:</strong> 최근 3~6개월 거래내역을 내보내면 더 정확한 분류를 받을 수 있습니다.
-                EUC-KR 인코딩으로 저장된 파일도 자동 처리됩니다.
-              </p>
+            <div className={`rounded-xl border p-4 mb-5 ${recBiz ? 'border-purple-500/60 bg-purple-950/40' : 'border-purple-500/20 bg-purple-950/20'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-bold text-white text-sm">👑 Business 혜택</p>
+                {recBiz && <span className="text-xs text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded font-semibold">추천</span>}
+              </div>
+              <ul className="space-y-1.5 mb-4">
+                {['Pro 전체 기능 포함','세무사 상담 신청 버튼','다중 계정 관리 (최대 5개)'].map(f => (
+                  <li key={f} className="flex items-start gap-2 text-xs text-purple-100">
+                    <span className="text-purple-400 mt-0.5 flex-shrink-0">👑</span>{f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/signup?plan=business" className="block w-full rounded-lg bg-purple-600 hover:bg-purple-500 py-2.5 text-center text-sm font-bold text-white transition-colors">
+                Business 시작하기 (첫 달 44,500원)
+              </Link>
             </div>
-
-            <div className="mt-6 flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(2)} className="gap-2">
-                <ChevronLeft className="h-4 w-4" /> 이전
-              </Button>
-              <Button onClick={complete} disabled={saving} className="gap-2">
-                {saving ? (
-                  <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    저장 중...
-                  </span>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    CSV 업로드 시작하기
-                  </>
-                )}
-              </Button>
+            <p className="text-xs text-gray-600 text-center mb-4">※ 참고용 AI 코치입니다. 최종 신고는 세무사와 함께 확인하세요.</p>
+            {err && <p role="alert" className="text-sm text-red-400 bg-red-950/40 rounded-lg px-4 py-2 mb-4">{err}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => setStep(2)} className="flex-1 rounded-lg border border-gray-700 py-3 font-semibold hover:bg-gray-800 transition-colors text-sm">이전</button>
+              <button onClick={handleComplete} disabled={saving} className="flex-1 rounded-lg bg-gray-700 hover:bg-gray-600 py-3 font-semibold transition-colors disabled:opacity-50 text-sm">
+                {saving ? '저장 중...' : '무료로 시작하기'}
+              </button>
             </div>
           </div>
         )}
       </div>
-    </main>
+    </div>
   )
 }

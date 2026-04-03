@@ -1,54 +1,41 @@
+/**
+ * @file src/app/auth/callback/route.ts
+ * @description OAuth / 이메일 확인 callback
+ */
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const code  = searchParams.get('code')
-  const error = searchParams.get('error')
-  const errorDescription = searchParams.get('error_description')
+const ALLOWED_NEXT = ['/dashboard', '/onboarding', '/settings']
+function sanitizeNext(raw: string | null): string | null {
+  if (!raw) return null
+  try { const d = decodeURIComponent(raw); return ALLOWED_NEXT.some(p => d.startsWith(p)) ? d : null } catch { return null }
+}
 
-  // ✅ Vercel에서 origin 대신 APP_URL 환경변수 사용
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://taxflow-ai-nine.vercel.app'
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const { searchParams, origin } = new URL(req.url)
+  const code = searchParams.get('code')
+  const next = sanitizeNext(searchParams.get('next'))
+  if (!code) return NextResponse.redirect(`${origin}/login?error=missing_code`)
 
-  if (error) {
-    console.error('[callback] Auth error:', error, errorDescription)
-    return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent(errorDescription ?? error)}`)
-  }
+  const store = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: n => store.get(n)?.value,
+        set: (n, v, o: CookieOptions) => { try { store.set({ name: n, value: v, ...o }) } catch {} },
+        remove: (n, o: CookieOptions) => { try { store.set({ name: n, value: '', ...o }) } catch {} },
+      },
+    },
+  )
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+  if (error || !data.user) return NextResponse.redirect(`${origin}/login?error=auth_failed`)
 
-  if (code) {
-    const supabase = await createServerSupabaseClient()
-    const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (exchangeError) {
-      console.error('[callback] Code exchange failed:', exchangeError.message)
-      return NextResponse.redirect(`${baseUrl}/login?error=인증에 실패했습니다`)
-    }
-
-    if (data.user) {
-      // 프로필 row 보장 (DB 트리거 누락 대비) — as any로 타입 우회
-      await (supabase.from('users_profile') as any).upsert(
-        {
-          id: data.user.id,
-          email: data.user.email!,
-          full_name:
-            data.user.user_metadata?.full_name ??
-            data.user.user_metadata?.name ??
-            null,
-        },
-        { onConflict: 'id', ignoreDuplicates: true }
-      )
-
-      // 온보딩 완료 여부 확인 후 리다이렉트
-      const { data: profile } = await (supabase as any)
-        .from('users_profile')
-        .select('onboarding_completed')
-        .eq('id', data.user.id)
-        .single() as { data: { onboarding_completed: boolean } | null }
-
-      const destination = profile?.onboarding_completed ? '/dashboard' : '/onboarding'
-      return NextResponse.redirect(`${baseUrl}${destination}`)
-    }
-  }
-
-  return NextResponse.redirect(`${baseUrl}/login`)
+  const { data: profile } = await supabase
+    .from('profiles').select('onboarding_completed,business_type').eq('id', data.user.id).single()
+  const done = !!(profile?.onboarding_completed && profile?.business_type)
+  const dest = !done ? '/onboarding' : (next || '/dashboard')
+  return NextResponse.redirect(`${origin}${dest}`)
 }
