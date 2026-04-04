@@ -1,4 +1,8 @@
-"use client"
+import os
+
+os.makedirs('src/app', exist_ok=True)
+
+content = '''"use client"
 import { useState, useRef } from "react"
 import Link from "next/link"
 
@@ -452,3 +456,9 @@ export default function LandingPage() {
     </div>
   )
 }
+'''
+
+with open('src/app/page.tsx', 'w', encoding='utf-8') as f:
+    f.write(content.lstrip('\n'))
+
+print('OK src/app/page.tsx')
