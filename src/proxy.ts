@@ -6,7 +6,7 @@ const PROTECTED_PREFIXES = ['/dashboard', '/upload', '/transactions', '/optimize
 const AUTH_ROUTES = ['/login', '/signup']
 const PUBLIC_ROUTES = ['/', '/onboarding']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // ── Build a response that forwards cookies ────────────────────────────────
