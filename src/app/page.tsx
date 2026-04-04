@@ -120,7 +120,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  async async function startProcess(file: File) {
+  async function startProcess(file: File) {
     setFileName(file.name)
     setPhase("uploading")
     setUploadPct(0)
