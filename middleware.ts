@@ -1,90 +1,75 @@
-/**
- * @file middleware.ts
- * @description TaxFlow AI — Route guard
- */
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
+import type { Database } from '@/types/supabase'
 
-const PUBLIC_PAGES = ['/', '/login', '/signup', '/demo', '/pricing', '/auth/callback', '/auth/confirm']
-const PUBLIC_API   = ['/api/health', '/api/webhook', '/api/demo']
+const PROTECTED_PREFIXES = ['/dashboard', '/upload', '/transactions', '/optimize', '/export', '/simulator', '/settings']
+const AUTH_ROUTES = ['/login', '/signup']
+const PUBLIC_ROUTES = ['/', '/onboarding']
 
-function isPublicPage(p: string) { return PUBLIC_PAGES.some(x => p === x || p.startsWith(x + '/') || p.startsWith(x + '?')) }
-function isPublicApi(p: string)  { return PUBLIC_API.some(x => p.startsWith(x)) }
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
 
-export async function middleware(req: NextRequest): Promise<NextResponse> {
-  const { pathname } = req.nextUrl
-  if (isPublicPage(pathname)) return NextResponse.next()
-  if (isPublicApi(pathname))  return NextResponse.next()
+  // ── Build a response that forwards cookies ────────────────────────────────
+  let response = NextResponse.next({ request })
 
-  let res = NextResponse.next({ request: { headers: req.headers } })
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) { return req.cookies.get(name)?.value },
-        set(name: string, value: string, options: CookieOptions) {
-          req.cookies.set({ name, value, ...options })
-          res = NextResponse.next({ request: { headers: req.headers } })
-          res.cookies.set({ name, value, ...options })
+        getAll() {
+          return request.cookies.getAll()
         },
-        remove(name: string, options: CookieOptions) {
-          req.cookies.set({ name, value: '', ...options })
-          res = NextResponse.next({ request: { headers: req.headers } })
-          res.cookies.set({ name, value: '', ...options })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
         },
       },
-    },
+    }
   )
 
-  const { data: { user }, error } = await supabase.auth.getUser()
-  const authed = !error && !!user
+  // ── Refresh session (required by @supabase/ssr) ───────────────────────────
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (pathname.startsWith('/api/')) {
-    if (!authed) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
-    return res
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))
+  const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p))
+  const isOnboarding = pathname.startsWith('/onboarding')
+
+  // ── Not logged in → protected route → send to /login ─────────────────────
+  if (!user && isProtected) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirectTo', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  if (pathname === '/login' || pathname === '/signup') {
-    if (authed) {
-      const dest = await resolvePostLoginDest(supabase, user!.id)
-      return NextResponse.redirect(new URL(dest, req.url))
+  // ── Logged in → trying to access /login or /signup → send to /dashboard ──
+  if (user && isAuthRoute) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // ── Logged in + onboarding not done → force /onboarding ──────────────────
+  if (user && !isOnboarding && isProtected) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profile } = await (supabase as any)
+      .from('users_profile')
+      .select('onboarding_completed')
+      .eq('id', user.id)
+      .single()
+
+    if (profile && !profile.onboarding_completed) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
     }
-    return res
   }
 
-  if (!authed) {
-    const url = new URL('/login', req.url)
-    url.searchParams.set('next', pathname)
-    return NextResponse.redirect(url)
-  }
-
-  const onboarded = await checkOnboarding(supabase, user!.id)
-
-  if (pathname.startsWith('/dashboard')) {
-    if (!onboarded) return NextResponse.redirect(new URL('/onboarding', req.url))
-    return res
-  }
-  if (pathname.startsWith('/onboarding')) {
-    if (onboarded) return NextResponse.redirect(new URL('/dashboard', req.url))
-    return res
-  }
-
-  return res
-}
-
-async function checkOnboarding(supabase: any, userId: string): Promise<boolean> {
-  try {
-    const { data } = await supabase
-      .from('profiles').select('onboarding_completed,business_type').eq('id', userId).single()
-    return !!(data?.onboarding_completed && data?.business_type)
-  } catch { return false }
-}
-
-async function resolvePostLoginDest(supabase: any, userId: string): Promise<string> {
-  return (await checkOnboarding(supabase, userId)) ? '/dashboard' : '/onboarding'
+  return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: [
+    // Match all routes except Next.js internals and static files
+    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)',
+  ],
 }
