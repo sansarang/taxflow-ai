@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const ipUsage = new Map<string, number>()
 const DEMO_LIMIT = 3
 
@@ -10,6 +9,7 @@ function getIP(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const ip = getIP(req)
   const used = ipUsage.get(ip) ?? 0
   if (used >= DEMO_LIMIT) {
