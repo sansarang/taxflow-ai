@@ -1,4 +1,6 @@
-"use client"
+const fs = require('fs')
+
+const content = `"use client"
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -31,7 +33,7 @@ interface UserProfile {
 }
 
 function parseCSV(text: string): TxInput[] {
-  const lines = text.trim().split("\n").filter(l => l.trim())
+  const lines = text.trim().split("\\n").filter(l => l.trim())
   if (lines.length < 2) return []
   const rows: TxInput[] = []
   for (let i = 1; i < Math.min(lines.length, 21); i++) {
@@ -72,8 +74,8 @@ function PainPointDemo({ demo }: { demo: string }) {
   if (demo === "auto_classify") {
     const items = ["어도비 구독 → 소프트웨어 ✓", "카카오택시 → 교통비 ✓", "AWS 서버 → 통신비 ✓", "쿠팡 조명 → 장비구입 ✓"]
     return (<div className="space-y-2">{items.map((item, i) => (
-      <div key={item} className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg transition-all duration-500 ${tick % 4 >= i ? "bg-violet-500/20 text-violet-300" : "bg-white/[0.04] text-white/25"}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${tick % 4 >= i ? "bg-violet-400" : "bg-white/20"}`} />{item}
+      <div key={item} className={\`flex items-center gap-2 text-xs px-3 py-2 rounded-lg transition-all duration-500 \${tick % 4 >= i ? "bg-violet-500/20 text-violet-300" : "bg-white/[0.04] text-white/25"}\`}>
+        <span className={\`w-1.5 h-1.5 rounded-full \${tick % 4 >= i ? "bg-violet-400" : "bg-white/20"}\`} />{item}
       </div>
     ))}</div>)
   }
@@ -82,7 +84,7 @@ function PainPointDemo({ demo }: { demo: string }) {
     return (<div className="space-y-2">
       <div className="text-xs text-white/30 mb-3">AI 공제 감지 중...</div>
       {["장비구입 89,000원 → 공제가능!", "소프트웨어 65,000원 → 공제가능!", "교통비 12,000원 → 공제가능!"].map((t, i) => (
-        <div key={t} className={`text-xs px-3 py-2 rounded-lg transition-all duration-700 ${found > i ? "bg-green-500/15 text-green-400" : "bg-white/[0.03] text-white/20"}`}>
+        <div key={t} className={\`text-xs px-3 py-2 rounded-lg transition-all duration-700 \${found > i ? "bg-green-500/15 text-green-400" : "bg-white/[0.03] text-white/20"}\`}>
           {found > i ? "✓ " : "◎ "}{t}
         </div>
       ))}
@@ -94,7 +96,7 @@ function PainPointDemo({ demo }: { demo: string }) {
     { label: "종합소득세 신고", date: "5월 31일", done: false },
     { label: "2분기 예정신고", date: "7월 25일", done: false },
   ].map(a => (
-    <div key={a.label} className={`flex items-center justify-between text-xs px-3 py-2.5 rounded-lg ${a.done ? "bg-white/[0.04] text-white/30" : "bg-violet-500/15 text-violet-300"}`}>
+    <div key={a.label} className={\`flex items-center justify-between text-xs px-3 py-2.5 rounded-lg \${a.done ? "bg-white/[0.04] text-white/30" : "bg-violet-500/15 text-violet-300"}\`}>
       <span>{a.done ? "✓ " : "🔔 "}{a.label}</span>
       <span className={a.done ? "text-white/20" : "text-violet-400 font-bold"}>{a.date}</span>
     </div>
@@ -104,7 +106,7 @@ function PainPointDemo({ demo }: { demo: string }) {
     return (<div className="text-center space-y-3">
       <div className="w-16 h-20 rounded-lg border border-white/10 bg-white/[0.03] mx-auto flex items-center justify-center text-3xl">🧾</div>
       <div className="space-y-1.5">{["사진 인식 중...", "텍스트 추출 중...", "거래내역 등록 완료!", "공제 항목 확인됨!"].map((t, i) => (
-        <div key={t} className={`text-xs transition-all ${s === i ? "text-violet-400 font-bold" : s > i ? "text-white/30" : "text-white/10"}`}>
+        <div key={t} className={\`text-xs transition-all \${s === i ? "text-violet-400 font-bold" : s > i ? "text-white/30" : "text-white/10"}\`}>
           {s > i ? "✓ " : s === i ? "◎ " : ""}{t}
         </div>
       ))}</div>
@@ -210,7 +212,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
         </div>
       )}
       <div
-        className={`rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-all ${dragOver ? "border-violet-400 bg-violet-500/10" : "border-white/10 hover:border-white/20"}`}
+        className={\`rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-all \${dragOver ? "border-violet-400 bg-violet-500/10" : "border-white/10 hover:border-white/20"}\`}
         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) startProcess(f) }}
@@ -265,7 +267,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
         <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 128 128">
           <circle cx="64" cy="64" r="58" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
           <circle cx="64" cy="64" r="58" fill="none" stroke="#7c3aed" strokeWidth="4"
-            strokeDasharray={`${(analyzePct / 100) * 364.4} 364.4`}
+            strokeDasharray={\`\${(analyzePct / 100) * 364.4} 364.4\`}
             strokeLinecap="round" style={{ transition: "stroke-dasharray 0.15s" }} />
         </svg>
       </div>
@@ -308,7 +310,7 @@ function ResultBox({ results, onReset, onDownload }: { results: TxResult[]; onRe
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="text-xs font-semibold">{r.amount.toLocaleString()}원</p>
-                <span className={`text-[10px] font-bold ${r.isDeductible ? "text-violet-400" : "text-white/20"}`}>
+                <span className={\`text-[10px] font-bold \${r.isDeductible ? "text-violet-400" : "text-white/20"}\`}>
                   {r.isDeductible ? "공제가능" : "공제불가"}
                 </span>
               </div>
@@ -387,7 +389,7 @@ function DashboardView({ profile, onSignOut }: { profile: UserProfile; onSignOut
             <h3 className="text-xl font-black mb-6">분석 결과 저장</h3>
             <div className="flex flex-col gap-3">
               <button onClick={() => {
-                const csv = ["항목,금액,카테고리,공제가능", ...results.map(r => r.desc + "," + r.amount + "," + r.category + "," + (r.isDeductible ? "예" : "아니오"))].join("\n")
+                const csv = ["항목,금액,카테고리,공제가능", ...results.map(r => r.desc + "," + r.amount + "," + r.category + "," + (r.isDeductible ? "예" : "아니오"))].join("\\n")
                 const a = document.createElement("a"); a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv); a.download = "미리택스_분석결과.csv"; a.click(); setShowModal(false)
               }} className="w-full py-3.5 rounded-xl font-bold text-sm" style={{ background: "#7c3aed", color: "white" }}>CSV 다운로드</button>
               <button onClick={() => setShowModal(false)} className="text-xs text-white/20 hover:text-white/40 py-2">닫기</button>
@@ -493,11 +495,11 @@ function LandingView() {
               { name: "Pro", price: "39,000", unit: "원/월", sub: "첫 달 19,500원", features: ["무제한 분류", "AI 공제 최적화", "사진 OCR", "분기 알림", "주간 리포트"], cta: "카드로 시작", href: "/signup?plan=pro", hi: true },
               { name: "Business", price: "89,000", unit: "원/월", sub: "첫 달 44,500원", features: ["Pro 전체", "세무사 연동", "PDF 신고서", "팀원 초대", "우선 지원"], cta: "카드로 시작", href: "/signup?plan=business", hi: false },
             ].map(p => (
-              <div key={p.name} className={`rounded-2xl p-7 border flex flex-col ${p.hi ? "border-violet-500/40" : "border-white/[0.07]"}`} style={{ background: p.hi ? "#1e1530" : "#1a1c22" }}>
+              <div key={p.name} className={\`rounded-2xl p-7 border flex flex-col \${p.hi ? "border-violet-500/40" : "border-white/[0.07]"}\`} style={{ background: p.hi ? "#1e1530" : "#1a1c22" }}>
                 {p.hi && <div className="text-[10px] font-bold text-violet-400 mb-4 tracking-widest uppercase">Best Value</div>}
                 <div className="font-bold mb-1 text-white/80">{p.name}</div>
                 <div className="text-3xl font-black mb-1">{p.price}<span className="text-sm font-normal text-white/25">{p.unit}</span></div>
-                <div className={`text-xs font-semibold mb-6 ${p.hi ? "text-violet-400" : "text-white/25"}`}>{p.sub}</div>
+                <div className={\`text-xs font-semibold mb-6 \${p.hi ? "text-violet-400" : "text-white/25"}\`}>{p.sub}</div>
                 <ul className="space-y-2.5 mb-7 flex-1">
                   {p.features.map(f => (
                     <li key={f} className="flex items-center gap-2.5 text-xs text-white/45">
@@ -521,7 +523,7 @@ function LandingView() {
               <div key={i} className="border-b border-white/[0.07]">
                 <button className="w-full flex items-center justify-between py-5 text-left" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
                   <span className="text-sm sm:text-base font-medium text-white/65">{item.q}</span>
-                  <svg className={`w-5 h-5 flex-shrink-0 ml-4 text-white/25 transition-transform ${openFaq === i ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className={\`w-5 h-5 flex-shrink-0 ml-4 text-white/25 transition-transform \${openFaq === i ? "rotate-180" : ""}\`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
@@ -647,4 +649,7 @@ export default function RootPage() {
       )}
     </div>
   )
-}
+}`
+
+fs.writeFileSync('src/app/page.tsx', content, 'utf8')
+console.log('✅ page.tsx 작성 완료')
