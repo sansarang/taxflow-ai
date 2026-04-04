@@ -1,4 +1,4 @@
-/**
+content = r"""/**
  * @file src/app/api/classify/route.ts
  * @description TaxFlow AI — /api/classify v7 Final
  */
@@ -322,3 +322,9 @@ function buildSummary(classified: ClassificationResult[], opt: DeductionOptimize
     riskScore: opt?.riskScore ?? 0,
   }
 }
+"""
+
+with open("src/app/api/classify/route.ts", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("✅ route.ts 작성 완료")
