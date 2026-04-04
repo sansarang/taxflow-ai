@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'TaxFlow AI — 크리에이터를 위한 실시간 세금 AI 코치',
+  title: '세금비서 — 크리에이터를 위한 실시간 세금 AI 코치',
   description:
     '은행 CSV 업로드 하나로 절세 기회 발견 + 홈택스 신고 파일 자동 생성. 유튜버·프리랜서·1인사업자 특화 세금 AI.',
   keywords: ['세금', '절세', '크리에이터', '유튜버', '프리랜서', '부가세', '종합소득세'],
