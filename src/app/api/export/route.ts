@@ -1,16 +1,6 @@
 /**
  * POST /api/export
- * ─────────────────────────────────────────────────────────────────────────────
- * Generates a tax export file (CSV, XML, or PDF), uploads it to Supabase
- * Storage, and returns a 24-hour signed download URL.
- *
- * Input (JSON body):
- *   reportType: 'vat_q1'|'vat_q2'|'vat_q3'|'vat_q4'|'income_tax'|'monthly'
- *   year:       number
- *   quarter?:   number (1–4, or month 1–12 for 'monthly')
- *   format:     'csv' | 'xml' | 'pdf'
  */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server'
 import { calculateVAT, calculateIncomeTax, calculateRiskScore } from '@/lib/tax/calculator'
@@ -19,17 +9,14 @@ import { generateVATXML } from '@/lib/export/hometax-xml'
 import { generateOptimizationPDF } from '@/lib/export/pdf-report'
 import { runDeductionOptimizer } from '@/lib/ai/optimizer'
 import type { ReportType } from '@/types/supabase'
-import type { ClassifiedTransaction } from '@/lib/ai/optimizer'
 import type { ReportPeriod } from '@/lib/tax/calculator'
-
-// ─── Period builder ───────────────────────────────────────────────────────────
 
 function buildPeriod(reportType: ReportType, year: number, quarter?: number): ReportPeriod {
   if (reportType === 'income_tax') {
     return {
       year, quarter: undefined,
       startDate: `${year}-01-01`, endDate: `${year}-12-31`,
-      label: `${year}년 종합소득세`,
+      label: `${year} Income Tax`,
     }
   }
   if (reportType === 'monthly' && quarter) {
@@ -39,7 +26,7 @@ function buildPeriod(reportType: ReportType, year: number, quarter?: number): Re
       year, quarter,
       startDate: `${year}-${month}-01`,
       endDate: `${year}-${month}-${lastDay}`,
-      label: `${year}년 ${quarter}월`,
+      label: `${year}-${month}`,
     }
   }
   const qRanges: Record<string, { s: number; e: number }> = {
@@ -53,66 +40,44 @@ function buildPeriod(reportType: ReportType, year: number, quarter?: number): Re
     year, quarter: q,
     startDate: `${year}-${String(range.s).padStart(2, '0')}-01`,
     endDate: `${year}-${String(range.e).padStart(2, '0')}-${lastDay}`,
-    label: `${year}년 ${range.s}~${range.e}월 (${reportType.toUpperCase()})`,
+    label: `${year} ${reportType.toUpperCase()}`,
   }
 }
 
-// ─── Route handler ────────────────────────────────────────────────────────────
-
 export async function POST(request: NextRequest) {
-  // ── Auth ──────────────────────────────────────────────────────────────────
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) {
-    return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
+    return NextResponse.json({ error: 'Login required' }, { status: 401 })
   }
 
-  // ── Parse body ────────────────────────────────────────────────────────────
-  let body: {
-    reportType?: string
-    year?: number
-    quarter?: number
-    format?: string
-  }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: '요청 형식이 잘못되었습니다' }, { status: 400 })
-  }
+  let body: { reportType?: string; year?: number; quarter?: number; format?: string }
+  try { body = await request.json() }
+  catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }) }
 
   const { reportType, year, quarter, format } = body
-
   if (!reportType || !year || !format) {
-    return NextResponse.json(
-      { error: 'reportType, year, format 값이 필요합니다' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'reportType, year, format required' }, { status: 400 })
   }
 
   const validTypes = ['vat_q1','vat_q2','vat_q3','vat_q4','income_tax','monthly'] as const
   if (!validTypes.includes(reportType as ReportType)) {
-    return NextResponse.json({ error: '유효하지 않은 reportType입니다' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid reportType' }, { status: 400 })
   }
   if (!['csv','xml','pdf'].includes(format)) {
-    return NextResponse.json({ error: 'format은 csv, xml, pdf 중 하나여야 합니다' }, { status: 400 })
+    return NextResponse.json({ error: 'format must be csv, xml, or pdf' }, { status: 400 })
   }
 
   const db = createAdminClient()
   const period = buildPeriod(reportType as ReportType, year, quarter)
 
   try {
-    // ── Fetch user profile ────────────────────────────────────────────────
     const { data: profile, error: profileErr } = await (db as any)
-      .from('users_profile')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
+      .from('users_profile').select('*').eq('id', user.id).single()
     if (profileErr || !profile) {
-      return NextResponse.json({ error: '프로필을 찾을 수 없습니다' }, { status: 404 })
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
-    // ── Fetch transactions for period ─────────────────────────────────────
     const { data: rows, error: txErr } = await (db as any)
       .from('transactions')
       .select('*')
@@ -122,10 +87,10 @@ export async function POST(request: NextRequest) {
       .order('transaction_date', { ascending: true })
 
     if (txErr) {
-      return NextResponse.json({ error: `거래 내역 조회 실패: ${txErr.message}` }, { status: 500 })
+      return NextResponse.json({ error: `Transaction fetch failed: ${txErr.message}` }, { status: 500 })
     }
 
-    const transactions: ClassifiedTransaction[] = (rows ?? []).map((r: any) => ({
+    const transactions: any[] = (rows ?? []).map((r: any) => ({
       id: String(r.id),
       transactionDate: String(r.transaction_date),
       description: String(r.description),
@@ -140,21 +105,19 @@ export async function POST(request: NextRequest) {
       userCategory: r.user_category ?? null,
     }))
 
-    // ── Compute tax figures ───────────────────────────────────────────────
     const isVAT = reportType.startsWith('vat')
     const vatData = calculateVAT(transactions, profile.is_simplified_tax ?? false)
 
     const totalIncome = transactions
-      .filter((t) => t.amount > 0 && ['101','102','103'].includes(t.taxCategory ?? ''))
-      .reduce((s, t) => s + t.amount, 0)
+      .filter((t: any) => t.amount > 0 && ['101','102','103'].includes(t.taxCategory ?? ''))
+      .reduce((s: number, t: any) => s + t.amount, 0)
     const totalExpense = transactions
-      .filter((t) => t.amount < 0)
-      .reduce((s, t) => s + Math.abs(t.amount), 0)
+      .filter((t: any) => t.amount < 0)
+      .reduce((s: number, t: any) => s + Math.abs(t.amount), 0)
 
     const incomeTaxCalc = calculateIncomeTax(totalIncome, totalExpense)
     const riskScore = calculateRiskScore(transactions)
 
-    // ── Generate file content ─────────────────────────────────────────────
     let fileContent: Buffer
     let contentType: string
     let fileExt: string
@@ -179,24 +142,13 @@ export async function POST(request: NextRequest) {
       fileExt = 'xml'
 
     } else {
-      // PDF — requires optimizer result for recommendations
-      const taxLaw = {
-        entertainmentAnnualLimit: 3_600_000,
-        entertainmentPerReceiptLimit: 30_000,
-        vehicleBusinessUseRatio: 0.5,
-        yellowUmbrellaMaxDeduction: 5_000_000,
-      }
       const optimizerResult = await runDeductionOptimizer(
-        transactions,
-        {
-          business_type: profile.business_type,
-          is_simplified_tax: profile.is_simplified_tax,
-          annual_revenue_tier: profile.annual_revenue_tier,
-        },
-        taxLaw
+        transactions as any,
+        totalIncome,
+        profile.business_type ?? 'creator',
+        Boolean(profile.is_simplified_tax)
       )
 
-      // Top categories for PDF
       const catMap = new Map<string, number>()
       for (const tx of transactions) {
         if (tx.amount < 0 && tx.categoryLabel) {
@@ -204,7 +156,7 @@ export async function POST(request: NextRequest) {
         }
       }
       const topCategories = [...catMap.entries()]
-        .sort(([,a],[,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
         .map(([label, amount]) => ({ label, amount }))
 
@@ -231,11 +183,11 @@ export async function POST(request: NextRequest) {
           deductions,
           topCategories,
           summary: {
-            headline: `${period.label} 세금 리포트`,
-            keyPoints: optimizerResult.recommendations.slice(0, 3).map((r) => r.title),
-            actionRequired: optimizerResult.creatorSpecificAlerts[0] ?? '',
+            headline: period.label + ' Tax Report',
+            keyPoints: (optimizerResult.recommendations as string[]).slice(0, 3),
+            actionRequired: optimizerResult.anomalyAlerts?.[0]?.message ?? '',
           },
-          disclaimer: '⚠️ 본 서비스는 참고용 AI 코치입니다. AI 판단은 법적 효력이 없습니다.',
+          disclaimer: 'AI-generated reference only. Not legal tax advice.',
         },
         optimizerResult,
         userName: profile.full_name ?? user.email ?? 'User',
@@ -247,7 +199,6 @@ export async function POST(request: NextRequest) {
       fileExt = 'pdf'
     }
 
-    // ── Upload to Supabase Storage ─────────────────────────────────────────
     const BUCKET = 'tax-reports'
     const filePath = `${user.id}/${year}-${reportType}-${Date.now()}.${fileExt}`
 
@@ -256,39 +207,32 @@ export async function POST(request: NextRequest) {
       .upload(filePath, fileContent, { contentType, upsert: true })
 
     if (uploadErr) {
-      console.error('[export] Storage upload error:', uploadErr)
-      return NextResponse.json({ error: '파일 업로드에 실패했습니다' }, { status: 500 })
+      console.error('[export] upload error:', uploadErr)
+      return NextResponse.json({ error: 'File upload failed' }, { status: 500 })
     }
 
-    // ── Signed URL — 24 hours ─────────────────────────────────────────────
     const { data: signed, error: signErr } = await db.storage
       .from(BUCKET)
       .createSignedUrl(filePath, 60 * 60 * 24)
 
     if (signErr || !signed?.signedUrl) {
-      return NextResponse.json({ error: '다운로드 URL 생성에 실패했습니다' }, { status: 500 })
+      return NextResponse.json({ error: 'Signed URL creation failed' }, { status: 500 })
     }
 
-    // ── Upsert tax_reports record ─────────────────────────────────────────
-    await (db as any)
-      .from('tax_reports')
-      .upsert({
-        user_id: user.id,
-        report_type: reportType,
-        period_year: year,
-        period_quarter: quarter ?? null,
-        total_income: totalIncome,
-        total_expense: totalExpense,
-        vat_payable: vatData.vatPayable,
-        estimated_tax: incomeTaxCalc.totalTax,
-        risk_score: riskScore,
-        file_url: signed.signedUrl,
-        disclaimer_shown: true,
-        generated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,report_type,period_year,period_quarter',
-        ignoreDuplicates: false,
-      })
+    await (db as any).from('tax_reports').upsert({
+      user_id: user.id,
+      report_type: reportType,
+      period_year: year,
+      period_quarter: quarter ?? null,
+      total_income: totalIncome,
+      total_expense: totalExpense,
+      vat_payable: vatData.vatPayable,
+      estimated_tax: incomeTaxCalc.totalTax,
+      risk_score: riskScore,
+      file_url: signed.signedUrl,
+      disclaimer_shown: true,
+      generated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,report_type,period_year,period_quarter', ignoreDuplicates: false })
 
     return NextResponse.json({
       url: signed.signedUrl,
@@ -297,16 +241,11 @@ export async function POST(request: NextRequest) {
       format,
       period: period.label,
       riskScore,
-      summary: {
-        totalIncome,
-        totalExpense,
-        vatPayable: vatData.vatPayable,
-        estimatedTax: incomeTaxCalc.totalTax,
-      },
+      summary: { totalIncome, totalExpense, vatPayable: vatData.vatPayable, estimatedTax: incomeTaxCalc.totalTax },
     })
 
   } catch (error) {
-    console.error('[export] Fatal error:', error)
-    return NextResponse.json({ error: `내보내기에 실패했습니다: ${String(error)}` }, { status: 500 })
+    console.error('[export] Fatal:', error)
+    return NextResponse.json({ error: `Export failed: ${String(error)}` }, { status: 500 })
   }
 }

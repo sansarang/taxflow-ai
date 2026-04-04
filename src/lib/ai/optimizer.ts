@@ -46,6 +46,13 @@ export interface AnomalyAlert {
 /** @deprecated use ClassificationResult from classifier.ts — kept for backward compat */
 export type ClassifiedTransaction = import('./classifier').ClassificationResult
 
+export interface TaxLawData {
+  entertainmentAnnualLimit: number
+  entertainmentPerReceiptLimit: number
+  vehicleBusinessUseRatio: number
+  [key: string]: unknown
+}
+
 export interface DeductionOptimizerResult {
   totalIncome: number
   totalExpense: number
