@@ -48,7 +48,7 @@ function vatAmount(amount: number): number {
   return Math.round(Math.abs(amount) - vatBasis(amount))
 }
 
-function evidenceType(tx: ClassifiedTransaction): string {
+function evidenceType(tx: any): string {
   const cat = tx.taxCategory ?? ''
   if (cat === '202') return '신용카드'
   if (cat === '203') return '현금영수증'
