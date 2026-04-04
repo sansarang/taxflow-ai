@@ -112,6 +112,19 @@ function PainPointDemo({ demo }: { demo: string }) {
 
 // ─── Upload Box States ────────────────────────────────────────────────────────
 
+
+function parseCSV(text: string): TxInput[] {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+  const rows: TxInput[] = []
+  for (let i = 1; i < Math.min(lines.length, 21); i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+    const amount = parseFloat(cols[2] || cols[1] || '0')
+    if (isNaN(amount)) continue
+    rows.push({ description: cols[0] || ('거래 ' + i), amount: -Math.abs(amount), date: cols[3] || new Date().toISOString().slice(0,10) })
+  }
+  return rows
+}
 function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }) {
   const [phase, setPhase] = useState<"idle"|"uploading"|"analyzing">("idle")
   const [uploadPct, setUploadPct] = useState(0)
