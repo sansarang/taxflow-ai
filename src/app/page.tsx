@@ -155,7 +155,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
           transactions.push({
             description: String(row[0] || '거래 ' + i),
             amount: -Math.abs(amount),
-            date: String(row[3] || new Date().OString().slice(0, 10))
+            date: String(row[3] || new Date().toISOString().slice(0, 10))
           })
         }
         if (transactions.length === 0) {
@@ -187,7 +187,8 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
         try {
           const res = await fetch('/api/demo-classify', {
             method: 'POST',
-            headers: { 'Conten       body: JSON.stringify({ transactions }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactions }),
           })
           const data = await res.json()
           clearInterval(apTimer)
