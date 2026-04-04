@@ -174,7 +174,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
       onComplete(data.results)
     } catch(e) {
       clearInterval(apTimer)
-      set했습니다.")
+      setError("네트워크 오류가 발생했습니다.")
       setPhase("idle")
     }
   }
