@@ -104,7 +104,7 @@ export const classifyCache = {
   async mset(userId: string, results: ClassificationResult[]): Promise<void> {
     if (results.length === 0) return
     try {
-      await Promise.all(results.map((r) => classifyCache.set(userId, r.txHash, r)))
+      await Promise.all(results.map((r) => classifyCache.set(userId, (r as any).txHash, r)))
     } catch (err) {
       console.warn('[classifyCache.mset] Redis error:', err)
     }
