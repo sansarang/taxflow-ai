@@ -10,7 +10,6 @@
 
 import Papa from 'papaparse'
 import type { VATCalculation, ReportPeriod } from '@/lib/tax/calculator'
-import type { ClassifiedTransaction } from '@/lib/ai/optimizer'
 import type { Transaction } from '@/types/transaction'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -135,7 +134,7 @@ export function generateVATDeclarationCSV(
  *
  * Columns: 일련번호, 날짜, 거래내역, 금액, 공급가액, 세액, 분류, 세금코드, 증빙유형, 비고
  */
-export function generateExpenseCSV(transactions: ClassifiedTransaction[]): string {
+export function generateExpenseCSV(transactions: any[]): string {
   // Sort: income first, then expenses; within each group, by date ascending
   const sorted = [...transactions].sort((a, b) => {
     const aIncome = (a.taxCategory ?? '').startsWith('1')
