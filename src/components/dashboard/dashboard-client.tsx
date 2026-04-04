@@ -75,7 +75,7 @@ export default function DashboardClient({ user, profile, recentTransactions, rec
     setNotiLoading(true)
     await createBrowserSupabase().from('profiles')
       .update({ notification_setup_done: true, notification_type: type, updated_at: new Date().toISOString() })
-      .eq('id', user.id).catch(() => {})
+      .eq('id', user.id).then(() => {})
     setNotiLoading(false); setShowWelcome(false)
   }
 
