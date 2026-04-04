@@ -120,37 +120,61 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  function startProcess(file: File) {
+  async function startProcess(file: File) {
     setFileName(file.name)
     setPhase("uploading")
     setUploadPct(0)
-    // 업로드 진행률 0→100
-    let up = 0
-    const upTimer = setInterval(() => {
-      up += Math.floor(Math.random() * 12) + 5
-      if (up >= 100) {
-        up = 100
-        setUploadPct(100)
-        clearInterval(upTimer)
-        // 분석 단계로 전환
-        setTimeout(() => {
-          setPhase("analyzing")
-          setAnalyzePct(0)
-          let ap = 0
-          const apTimer = setInterval(() => {
-            ap += Math.floor(Math.random() * 8) + 3
-            if (ap >= 100) {
-              ap = 100
-              setAnalyzePct(100)
-              clearInterval(apTimer)
-              setTimeout(() => onComplete(SAMPLE), 400)
-            }
-            setAnalyzePct(ap)
-          }, 120)
-        }, 500)
+    // 파일 읽기
+    let transactions = []
+    if (file.type.startsWith("image/")) {
+      transactions = [{ description: file.name, amount: 0, date: new Date().toISOString().slice(0,10) }]
+    } else {
+      const text = await file.text()
+      transactions = parseCSV(text)
+      if (transactions.length === 0) {
+        setError("거래내역을 찾을 수 없습니다.")
+        setPhase("idle")
+        return
       }
-      setUploadPct(up)
-    }, 80)
+    }
+    // 업로드 진행률
+    let up = 0
+    await new Promise(function(resolve) {
+      const t = setInterval(function() {
+        up += Math.floor(Math.random()*12)+5
+        if (up >= 100) { setUploadPct(1}, 60)
+    })
+    await new Promise(function(r){ setTimeout(r, 400) })
+    setPhase("analyzing")
+    setAnalyzePct(0)
+    let ap = 0
+    const apTimer = setInterval(function() {
+      ap += Math.floor(Math.random()*6)+2
+      if (ap >= 90) { ap = 90; clearInterval(apTimer) }
+      setAnalyzePct(ap)
+    }, 100)
+    try {
+      const res = await fetch("/api/demo-classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions }),
+      })
+      const data = await res.json()
+      clearInterval(apTimer)
+      setAnalyzePct(100)
+      await new Promise(function(r){ setTimeout(r, 300) })
+      if (data.upgradeRequired) { setError(data.message); setPhase("idle"); return }
+      if (!data.success || !data.results || data.results.length === 0) {
+        setError(data.message || "분석 결과가 없습니다.")
+        setPhase("idle")
+        return
+      }
+      onComplete(data.results)
+    } catch(e) {
+      clearInterval(apTimer)
+      set했습니다.")
+      setPhase("idle")
+    }
   }
 
   function handleDrop(e: React.DragEvent) {
