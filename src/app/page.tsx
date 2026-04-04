@@ -120,7 +120,7 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  async function startProcess(file: File) {
+  async async function startProcess(file: File) {
     setFileName(file.name)
     setPhase("uploading")
     setUploadPct(0)
@@ -142,7 +142,9 @@ function UploadBox({ onComplete }: { onComplete: (results: TxResult[]) => void }
     await new Promise(function(resolve) {
       const t = setInterval(function() {
         up += Math.floor(Math.random()*12)+5
-        if (up >= 100) { setUploadPct(1}, 60)
+        if (up >= 100) { setUploadPct(100); clearInterval(t); resolve(undefined) }
+        else setUploadPct(up)
+      }, 60)
     })
     await new Promise(function(r){ setTimeout(r, 400) })
     setPhase("analyzing")
