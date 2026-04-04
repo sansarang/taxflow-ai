@@ -13,7 +13,7 @@ import {
   BASIC_DEDUCTION,
   VAT_RATE,
 } from './constants'
-import type { ClassifiedTransaction } from '@/lib/ai/optimizer'
+// ClassifiedTransaction replaced with any
 import type { TaxBracket } from '@/types/supabase'
 
 // ─── Public return types ──────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ export interface ReportPeriod {
  * Simplified taxpayer (간이과세자): output VAT rate = 4%, no input deduction
  */
 export function calculateVAT(
-  transactions: ClassifiedTransaction[],
+  transactions: any[],
   isSimplified: boolean
 ): VATCalculation {
   let taxableSales = 0
@@ -179,24 +179,24 @@ export function calculateIncomeTax(
  *
  * The score is the sum of (count / total) × weight, clamped to 0–100.
  */
-export function calculateRiskScore(transactions: ClassifiedTransaction[]): number {
+export function calculateRiskScore(transactions: any[]): number {
   const total = transactions.length
   if (total === 0) return 0
 
-  const expenses = transactions.filter((t) => t.amount < 0)
+  const expenses = transactions.filter((t: any) => t.amount < 0)
   const expenseCount = Math.max(expenses.length, 1)
 
   const missingReceipt = expenses.filter(
-    (t) => t.receiptRequired && !t.manuallyReviewed
+    (t: any) => t.receiptRequired && !t.manuallyReviewed
   ).length
 
   const unclassified = transactions.filter(
-    (t) => !t.taxCategory || t.taxCategory === '402'
+    (t: any) => !t.taxCategory || t.taxCategory === '402'
   ).length
 
   const HIGH_AMOUNT = 100_000
   const unreviewedHigh = transactions.filter(
-    (t) => t.amount < -HIGH_AMOUNT && !t.manuallyReviewed
+    (t: any) => t.amount < -HIGH_AMOUNT && !t.manuallyReviewed
   ).length
 
   const score =
