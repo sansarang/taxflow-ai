@@ -74,8 +74,8 @@ export function calculateVAT(
   let nonDeductible = 0   // sum of 401
 
   for (const tx of transactions) {
-    const cat = tx.taxCategory ?? ''
-    const abs = Math.abs(tx.amount)
+    const cat = (tx as any).taxCategory ?? ''
+    const abs = Math.abs((tx as any).amount)
 
     switch (cat) {
       case '101': taxableSales    += abs; break
