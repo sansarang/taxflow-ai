@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 
+export const maxDuration = 60
+export const runtime = "nodejs"
+
 const ipUsage = new Map<string, number>()
 const DEMO_LIMIT = 3
 
