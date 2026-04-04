@@ -2,7 +2,8 @@ import type { NextConfig } from 'next'
 
 const config: NextConfig = {
   experimental: { serverActions: { allowedOrigins: ['localhost:3000'] } },
-  outputFileTracingIncludes: { "/middleware": ["./middleware.ts"] },
+  skipMiddlewareUrlNormalize: true,
+  
   images: { remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co' }] },
 }
 
